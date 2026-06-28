@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GeoGames</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Press Start 2P', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── PALETTES ── */
+    body.p0 { --accent:#7c3aed; --accent2:#06b6d4; --bg:#0a0a0e; --surface:#13131a; --border:#252530; --text:#e8e8f0; --muted:#5a5a70; }
+    body.p1 { --accent:#ea580c; --accent2:#facc15; --bg:#0e0a07; --surface:#1a1208; --border:#302010; --text:#f0e8d8; --muted:#70583a; }
+    body.p2 { --accent:#059669; --accent2:#67e8f9; --bg:#07100e; --surface:#0d1a16; --border:#152b24; --text:#d8f0ea; --muted:#3a6a5a; }
+    body.p3 { --accent:#e11d48; --accent2:#fb923c; --bg:#0e070a; --surface:#1a0d12; --border:#30151e; --text:#f0d8df; --muted:#703a48; }
+    body.p4 { --accent:#4f46e5; --accent2:#a78bfa; --bg:#08080e; --surface:#10101c; --border:#1e1e34; --text:#ddddf8; --muted:#4a4a80; }
+    body.p5 { --accent:#d97706; --accent2:#f472b6; --bg:#0d0a06; --surface:#1a1408; --border:#2e200a; --text:#f5e8cc; --muted:#6b5030; }
+    body.p6 { --accent:#0891b2; --accent2:#86efac; --bg:#060e10; --surface:#0b1820; --border:#102832; --text:#d0eef5; --muted:#306080; }
+    body.p7 { --accent:#9333ea; --accent2:#f9a8d4; --bg:#0c080e; --surface:#180d1c; --border:#28153a; --text:#ead8f5; --muted:#6a3a80; }
+    body.p8 { --accent:#16a34a; --accent2:#fbbf24; --bg:#070e08; --surface:#0e1a10; --border:#152b18; --text:#d8f0dc; --muted:#3a6a40; }
+    body.p9 { --accent:#dc2626; --accent2:#38bdf8; --bg:#0e0808; --surface:#1a0d0d; --border:#301515; --text:#f5d8d8; --muted:#703a3a; }
+
+    /* AD */
+    .ad-wrap { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: center; align-items: center; padding: 6px; min-height: 56px; }
+    .ad-wrap iframe { display: block; width: min(728px, 100%); height: 90px; border: 0; }
+
+    /* LAYOUT */
+    main { max-width: 860px; width: 100%; margin: 0 auto; padding: 28px 20px; flex: 1; display: flex; flex-direction: column; gap: 22px; }
+
+    /* HEADER */
+    .header-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+    .logo { font-size: clamp(0.8rem, 3vw, 1.1rem); color: var(--accent); line-height: 1.5; }
+    .logo span { color: var(--accent2); }
+    .game-count { font-size: 0.5rem; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 4px 10px; }
+    .game-count b { color: var(--accent2); }
+
+    /* CONTROLS */
+    .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .btn { font-family: 'Press Start 2P', monospace; font-size: 0.55rem; background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 11px 14px; cursor: pointer; line-height: 1.6; transition: opacity 0.15s, transform 0.1s; white-space: nowrap; }
+    .btn:hover { opacity: 0.85; }
+    .btn:active { transform: scale(0.96); }
+    .btn-go { background: var(--accent2); color: #000; }
+    .num-wrap { display: flex; align-items: center; gap: 8px; }
+    .num-wrap label { font-size: 0.5rem; color: var(--muted); }
+    input[type=number] { font-family: 'Press Start 2P', monospace; font-size: 0.6rem; width: 72px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; outline: none; -moz-appearance: textfield; }
+    input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    input[type=number]:focus { border-color: var(--accent2); }
+
+    /* GRID */
+    #game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 12px; }
+    .game-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; text-decoration: none; color: var(--text); transition: border-color 0.15s, transform 0.15s; display: flex; flex-direction: column; }
+    .game-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .game-num { font-size: 0.45rem; color: var(--accent); background: var(--bg); border-bottom: 1px solid var(--border); padding: 7px 10px; letter-spacing: 1px; }
+    .game-thumb { width: 100%; aspect-ratio: 4/3; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 0.5rem; color: var(--muted); border-bottom: 1px solid var(--border); text-align: center; padding: 8px; line-height: 2; }
+    .game-title { font-size: 0.55rem; padding: 10px 12px 12px; line-height: 1.7; }
+    .empty { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 52px 0; font-size: 0.55rem; line-height: 2.5; }
+    .loading { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 52px 0; font-size: 0.5rem; line-height: 2.5; }
+
+    /* FOOTER */
+    footer { background: var(--surface); border-top: 1px solid var(--border); padding: 16px 20px; display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap; }
+    footer p { font-size: 0.45rem; color: var(--muted); }
+    .btn-donate { font-family: 'Press Start 2P', monospace; font-size: 0.45rem; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 99px; padding: 7px 14px; cursor: pointer; transition: border-color 0.15s, color 0.15s; line-height: 1.6; }
+    .btn-donate:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    /* MODAL */
+    .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; justify-content: center; align-items: center; padding: 20px; }
+    .overlay.open { display: flex; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 28px; max-width: 340px; width: 100%; }
+    .modal h3 { font-size: 0.6rem; margin-bottom: 16px; color: var(--accent2); line-height: 2; }
+    .modal p { font-size: 0.5rem; color: var(--muted); margin-bottom: 14px; line-height: 2; }
+    .wallet { font-size: 0.55rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; word-break: break-all; color: var(--accent2); margin-bottom: 14px; line-height: 1.8; }
+    .btn-close { width: 100%; padding: 10px; background: var(--border); color: var(--text); border: none; border-radius: 8px; cursor: pointer; font-family: 'Press Start 2P', monospace; font-size: 0.5rem; line-height: 1.8; }
+
+    @media (max-width: 460px) { #game-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+  </style>
+</head>
+<body>
+
+  <div class="ad-wrap">
+    <iframe src="https://a-ads.com/512087?size=728x90" scrolling="no"></iframe>
+  </div>
+
+  <main>
+    <div class="header-row">
+      <div class="logo">Geo<span>Games</span></div>
+      <div class="game-count"><b id="count">0</b> games</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" onclick="randomGame()">Random</button>
+      <div class="num-wrap">
+        <label for="gotonum">Go to #</label>
+        <input type="number" id="gotonum" min="1" placeholder="1"/>
+        <button class="btn btn-go" onclick="goToNumber()">Go</button>
+      </div>
+    </div>
+
+    <div id="game-grid">
+      <div class="loading">Loading games...</div>
+    </div>
+  </main>
+
+  <footer>
+    <p>GeoGames</p>
+    <button class="btn-donate" onclick="document.getElementById('donate-overlay').classList.add('open')">Support with crypto</button>
+  </footer>
+
+  <div class="overlay" id="donate-overlay">
+    <div class="modal">
+      <h3>Support GeoGames</h3>
+      <p>Enjoying the games? Send any amount in USDT or TON.</p>
+      <div class="wallet">YOUR_TON_WALLET_ADDRESS</div>
+      <p>TON network · no minimum</p>
+      <button class="btn-close" onclick="document.getElementById('donate-overlay').classList.remove('open')">Close</button>
+    </div>
+  </div>
+
+  <script>
+    // random palette — 10 options
+    document.body.classList.add('p' + Math.floor(Math.random() * 10));
+
+    let GAMES = [];
+
+    async function loadGames() {
+      try {
+        const res = await fetch('games.json?v=' + Date.now());
+        GAMES = await res.json();
+      } catch(e) {
+        GAMES = [];
+      }
+      renderGames();
+    }
+
+    function renderGames() {
+      const grid = document.getElementById('game-grid');
+      document.getElementById('count').textContent = GAMES.length;
+      if (!GAMES.length) {
+        grid.innerHTML = '<div class="empty">No games yet.<br>Check back soon.</div>';
+        return;
+      }
+      grid.innerHTML = GAMES.map((g, i) => `
+        <a class="game-card" href="${g.url}">
+          <div class="game-num">#${String(i+1).padStart(3,'0')}</div>
+          <div class="game-thumb">${g.title.toUpperCase()}</div>
+          <div class="game-title">${g.title}</div>
+        </a>`).join('');
+    }
+
+    function randomGame() {
+      if (!GAMES.length) return;
+      window.location.href = GAMES[Math.floor(Math.random() * GAMES.length)].url;
+    }
+
+    function goToNumber() {
+      const n = parseInt(document.getElementById('gotonum').value);
+      if (!n || n < 1 || n > GAMES.length) return;
+      window.location.href = GAMES[n - 1].url;
+    }
+
+    document.getElementById('gotonum').addEventListener('keydown', e => {
+      if (e.key === 'Enter') goToNumber();
+    });
+
+    loadGames();
+  </script>
+</body>
+</html>

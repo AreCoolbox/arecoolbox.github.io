@@ -1,0 +1,44 @@
+name: Update games list
+
+on:
+  push:
+    paths:
+      - 'games/**'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate games.json
+        run: |
+          python3 -c "
+          import os, json
+          games = []
+          if os.path.exists('games'):
+              for folder in sorted(os.listdir('games')):
+                  path = os.path.join('games', folder)
+                  if not os.path.isdir(path):
+                      continue
+                  # look for gamename.html first, then index.html
+                  for name in [folder + '.html', 'index.html']:
+                      html = os.path.join(path, name)
+                      if os.path.exists(html):
+                          title = folder.replace('-', ' ').replace('_', ' ').title()
+                          games.append({'title': title, 'url': html})
+                          break
+          with open('games.json', 'w') as f:
+              json.dump(games, f, indent=2)
+          print(f'Found {len(games)} games')
+          "
+
+      - name: Commit games.json
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add games.json
+          git diff --staged --quiet || git commit -m "Auto-update games list"
+          git push
