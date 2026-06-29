@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Bouncy Snake</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050510;
+            overflow: hidden;
+            touch-action: none; /* Вимикає стандартні свайпи браузера на телефоні */
+            color: white;
+            font-family: sans-serif;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            text-shadow: 0 0 10px #0ff;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h2>Рахунок: <span id="score">0</span></h2>
+        <p>Швидкість: <span id="speedDisplay">1.0</span>x</p>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const speedEl = document.getElementById('speedDisplay');
+
+        // Налаштування екрану
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Ігрова арена (починається з невеликого розміру і буде рости)
+        let arena = {
+            width: Math.min(window.innerWidth * 0.6, 600),
+            height: Math.min(window.innerHeight * 0.6, 600)
+        };
+
+        // Характеристики змійки
+        const snake = {
+            segments: [],
+            length: 20,
+            radius: 10,
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            angle: 0,
+            targetAngle: 0,
+            baseSpeed: 3,
+            maxSpeed: 9,
+            speed: 3,
+            color: 'hsl(180, 100%, 50%)' // Неоновий блакитний
+        };
+
+        for (let i = 0; i < snake.length; i++) {
+            snake.segments.push({ x: snake.x, y: snake.y });
+        }
+
+        let mouseX = snake.x;
+        let mouseY = snake.y - 100;
+        let orb = spawnOrb();
+        let particles = [];
+        let score = 0;
+        let hue = 180;
+
+        // Керування (Миша та Тач)
+        function updateTarget(e) {
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            mouseX = clientX;
+            mouseY = clientY;
+        }
+        window.addEventListener('mousemove', updateTarget);
+        window.addEventListener('touchmove', updateTarget);
+        window.addEventListener('touchstart', updateTarget);
+
+        // Спавн сфери всередині арени
+        function spawnOrb() {
+            const arenaX = (canvas.width - arena.width) / 2;
+            const arenaY = (canvas.height - arena.height) / 2;
+            return {
+                x: arenaX + 30 + Math.random() * (arena.width - 60),
+                y: arenaY + 30 + Math.random() * (arena.height - 60),
+                radius: 8
+            };
+        }
+
+        // Візуальні ефекти (частинки)
+        function createParticles(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: color
+                });
+            }
+        }
+
+        function gameLoop() {
+            ctx.fillStyle = 'rgba(5, 5, 16, 0.3)'; // Ефект шлейфу
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const arenaX = (canvas.width - arena.width) / 2;
+            const arenaY = (canvas.height - arena.height) / 2;
+
+            // Малюємо межі арени
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 5;
+            ctx.strokeRect(arenaX, arenaY, arena.width, arena.height);
+            ctx.shadowBlur = 0;
+
+            // Логіка повороту
+            let dx = mouseX - snake.x;
+            let dy = mouseY - snake.y;
+            snake.targetAngle = Math.atan2(dy, dx);
+
+            // Плавний поворот до цілі
+            let angleDiff = snake.targetAngle - snake.angle;
+            // Нормалізація кута, щоб змійка не крутилася через весь екран
+            while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+            snake.angle += angleDiff * 0.1; // Швидкість повороту
+
+            // 🚀 Механіка прискорення по прямій
+            if (Math.abs(angleDiff) < 0.1) {
+                snake.speed += 0.05; // Розганяємося
+                if (snake.speed > snake.maxSpeed) snake.speed = snake.maxSpeed;
+            } else {
+                snake.speed -= 0.2; // Гальмуємо на різких поворотах
+                if (snake.speed < snake.baseSpeed) snake.speed = snake.baseSpeed;
+            }
+            speedEl.innerText = (snake.speed / snake.baseSpeed).toFixed(1);
+
+            // Рух голови
+            snake.x += Math.cos(snake.angle) * snake.speed;
+            snake.y += Math.sin(snake.angle) * snake.speed;
+
+            // 💥 Механіка пружних стін (Bouncy Borders)
+            let bounced = false;
+            if (snake.x - snake.radius < arenaX) {
+                snake.x = arenaX + snake.radius;
+                snake.angle = Math.PI - snake.angle; // Відскік від лівої стіни
+                bounced = true;
+            } else if (snake.x + snake.radius > arenaX + arena.width) {
+                snake.x = arenaX + arena.width - snake.radius;
+                snake.angle = Math.PI - snake.angle; // Відскік від правої стіни
+                bounced = true;
+            }
+
+            if (snake.y - snake.radius < arenaY) {
+                snake.y = arenaY + snake.radius;
+                snake.angle = -snake.angle; // Відскік від верхньої стіни
+                bounced = true;
+            } else if (snake.y + snake.radius > arenaY + arena.height) {
+                snake.y = arenaY + arena.height - snake.radius;
+                snake.angle = -snake.angle; // Відскік від нижньої стіни
+                bounced = true;
+            }
+
+            if (bounced) {
+                createParticles(snake.x, snake.y, snake.color, 15);
+                snake.speed = snake.baseSpeed; // Втрата швидкості при ударі
+                // Додатковий хак для миші: після відскоку змушуємо ціль зміститися, щоб не прилипати до стіни
+                mouseX = snake.x + Math.cos(snake.angle) * 100;
+                mouseY = snake.y + Math.sin(snake.angle) * 100;
+            }
+
+            // Оновлення хвоста
+            snake.segments.unshift({ x: snake.x, y: snake.y });
+            while (snake.segments.length > snake.length) {
+                snake.segments.pop();
+            }
+
+            // Перевірка зіткнення з собою (Game Over)
+            // Починаємо перевірку з 20-го сегмента, щоб не було хибних смертей на крутих поворотах
+            for (let i = 20; i < snake.segments.length; i++) {
+                let seg = snake.segments[i];
+                let dist = Math.hypot(snake.x - seg.x, snake.y - seg.y);
+                if (dist < snake.radius) {
+                    alert("Game Over! Рахунок: " + score);
+                    location.reload(); // Перезапуск
+                }
+            }
+
+            // Збирання сфери
+            let distToOrb = Math.hypot(snake.x - orb.x, snake.y - orb.y);
+            if (distToOrb < snake.radius + orb.radius) {
+                score += 10;
+                scoreEl.innerText = score;
+                snake.length += 3;
+                createParticles(orb.x, orb.y, 'yellow', 30);
+                orb = spawnOrb();
+                
+                // 🌌 Зміна кольору та розширення арени
+                hue = (hue + 20) % 360;
+                snake.color = `hsl(${hue}, 100%, 50%)`;
+                
+                // Розширюємо арену, але не більше розмірів екрану
+                arena.width = Math.min(arena.width + 40, canvas.width - 20);
+                arena.height = Math.min(arena.height + 40, canvas.height - 20);
+            }
+
+            // Малювання сфери
+            ctx.beginPath();
+            ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'yellow';
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = 'yellow';
+            ctx.fill();
+            ctx.closePath();
+
+            // Малювання змійки
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = snake.color;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = snake.radius * 2;
+            
+            ctx.beginPath();
+            ctx.moveTo(snake.segments[0].x, snake.segments[0].y);
+            for (let i = 1; i < snake.segments.length; i++) {
+                ctx.lineTo(snake.segments[i].x, snake.segments[i].y);
+            }
+            ctx.strokeStyle = snake.color;
+            ctx.stroke();
+
+            // Малювання голови
+            ctx.beginPath();
+            ctx.arc(snake.x, snake.y, snake.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.closePath();
+
+            // Малювання частинок
+            ctx.shadowBlur = 0;
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.05;
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    ctx.globalAlpha = p.life;
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Автоматична адаптація при повороті телефону
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+        // Запуск
+        gameLoop();
+    </script>
+</body>
+</html>
