@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bouncy Snake - Pale Edition</title>
+    <title>Bouncy Snake - Ice Physics</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: #f4f6f8; /* Pale background */
+            background-color: #f4f6f8;
             overflow: hidden;
             touch-action: none;
             font-family: 'Press Start 2P', monospace;
@@ -35,7 +35,6 @@
         window.addEventListener('resize', resize);
         resize();
 
-        // Game states
         let gameState = 'playing'; 
         let score = 0;
         
@@ -43,7 +42,6 @@
         let camera = { x: 0, y: 0, ease: 0.1 };
 
         function getPaleColor() {
-            // Bright, pastel colors
             return `hsl(${Math.random() * 360}, 80%, 65%)`;
         }
 
@@ -54,9 +52,8 @@
             x: 0,
             y: 0,
             angle: 0,
-            speed: 0,      // Current moving speed
-            baseSpeed: 6,  // Target speed when touching
-            boost: 0,      // Temporary speed from bouncing
+            speed: 0,
+            maxSpeed: 12, // Increased max speed for the ice build-up
             color: getPaleColor()
         };
 
@@ -68,38 +65,39 @@
         let particles = [];
         let ripples = [];
 
-        // Input Handling
         function updateTarget(e) {
-            if (e.type.includes('touch')) {
+            if (e.touches && e.touches.length > 0) {
                 mouseX = e.touches[0].clientX;
                 mouseY = e.touches[0].clientY;
-            } else {
+            } else if (e.clientX) {
                 mouseX = e.clientX;
                 mouseY = e.clientY;
             }
         }
         
-        // Touch events
         window.addEventListener('touchstart', (e) => {
             if (gameState === 'gameover') { resetGame(); return; }
             isTouching = true;
             updateTarget(e);
         }, {passive: false});
+        
         window.addEventListener('touchmove', (e) => {
             if (isTouching) updateTarget(e);
         }, {passive: false});
+        
         window.addEventListener('touchend', () => isTouching = false);
         window.addEventListener('touchcancel', () => isTouching = false);
 
-        // Mouse events
         window.addEventListener('mousedown', (e) => {
             if (gameState === 'gameover') { resetGame(); return; }
             isTouching = true;
             updateTarget(e);
         });
+        
         window.addEventListener('mousemove', (e) => {
             if (isTouching) updateTarget(e);
         });
+        
         window.addEventListener('mouseup', () => isTouching = false);
         window.addEventListener('mouseleave', () => isTouching = false);
 
@@ -107,8 +105,8 @@
             for (let i = 0; i < 10; i++) {
                 particles.push({
                     x: x, y: y,
-                    vx: (Math.random() - 0.5) * 10,
-                    vy: (Math.random() - 0.5) * 10,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
                     radius: Math.random() * 4 + 2,
                     color: color,
                     alpha: 1,
@@ -128,7 +126,7 @@
                 y: (Math.random() - 0.5) * (arena.height - buffer * 2),
                 radius: 8,
                 color: getPaleColor(),
-                offset: Math.random() * 100 // For unique pulsing timing
+                offset: Math.random() * 100
             };
         }
 
@@ -139,7 +137,6 @@
             snake.x = 0;
             snake.y = 0;
             snake.speed = 0;
-            snake.boost = 0;
             snake.length = 20;
             snake.segments = [{ x: 0, y: 0, color: getPaleColor() }];
             
@@ -153,11 +150,9 @@
         resetGame();
 
         function gameLoop() {
-            // Pale Background
             ctx.fillStyle = '#f4f6f8';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Camera Tracking
             let targetCamX = (arena.width > canvas.width) ? snake.x : 0;
             let targetCamY = (arena.height > canvas.height) ? snake.y : 0;
             camera.x += (targetCamX - camera.x) * camera.ease;
@@ -172,8 +167,7 @@
             let halfW = arena.width / 2;
             let halfH = arena.height / 2;
 
-            // Draw Classic Grid
-            ctx.strokeStyle = '#e2e8f0'; // Light grey-blue grid lines
+            ctx.strokeStyle = '#e2e8f0';
             ctx.lineWidth = 1;
             for (let x = -halfW; x <= halfW; x += 40) {
                 ctx.beginPath(); ctx.moveTo(x, -halfH); ctx.lineTo(x, halfH); ctx.stroke();
@@ -182,13 +176,13 @@
                 ctx.beginPath(); ctx.moveTo(-halfW, y); ctx.lineTo(halfW, y); ctx.stroke();
             }
 
-            // Draw Arena Boundaries
             ctx.strokeStyle = '#cbd5e1';
             ctx.lineWidth = 6;
             ctx.strokeRect(-halfW, -halfH, arena.width, arena.height);
 
             if (gameState === 'playing') {
-                // Smooth turning only when touching
+                
+                // --- NEW ICE PHYSICS LOGIC ---
                 if (isTouching) {
                     let dx = worldMouseX - snake.x;
                     let dy = worldMouseY - snake.y;
@@ -201,20 +195,33 @@
                         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
                         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-                        snake.angle += angleDiff * 0.15; // Smooth turn
+                        // Slower turn speed for harder handling
+                        snake.angle += angleDiff * 0.12; 
+
+                        // 1. Slow down when turning (sharper turn = more speed lost)
+                        let turnSeverity = Math.abs(angleDiff);
+                        snake.speed *= (1 - turnSeverity * 0.06); 
+
+                        // 2. Speed up when going straight
+                        snake.speed += 0.35; // Acceleration force
+                        if (snake.speed > snake.maxSpeed) {
+                            snake.speed = snake.maxSpeed;
+                        }
                     }
+                } else {
+                    // 3. Stop like ice (low friction gliding)
+                    snake.speed *= 0.96; 
                 }
 
-                // Dynamic Speed & Deceleration
-                let targetSpeed = isTouching ? (snake.baseSpeed + snake.boost) : 0;
-                snake.speed += (targetSpeed - snake.speed) * 0.1; // Smoothly speed up or slow down
-                snake.boost *= 0.92; // Bounce boost decays rapidly
+                // Prevent the speed from hovering at microscopic floating point decimals
+                if (Math.abs(snake.speed) < 0.1) {
+                    snake.speed = 0;
+                }
 
-                // Move Head
                 snake.x += Math.cos(snake.angle) * snake.speed;
                 snake.y += Math.sin(snake.angle) * snake.speed;
 
-                // Bouncing Mechanics
+                // --- WALL COLLISION ---
                 let bounced = false;
                 if (snake.x - snake.radius < -halfW) {
                     snake.x = -halfW + snake.radius;
@@ -237,12 +244,13 @@
                 }
 
                 if (bounced) {
-                    snake.boost = 8; // Cap the maximum bounce boost
+                    // 4. Knockback at 1/2 speed
+                    snake.speed *= 0.5; 
                     spawnParticle(snake.x, snake.y, snake.color);
                     spawnRipple(snake.x, snake.y, snake.color);
                 }
 
-                // Distance-Based Segment Tracking (Fixes the stop-and-die bug)
+                // --- SEGMENT LOGIC ---
                 let lastSeg = snake.segments[0];
                 if (!lastSeg || Math.hypot(snake.x - lastSeg.x, snake.y - lastSeg.y) >= 4) {
                     snake.segments.unshift({ x: snake.x, y: snake.y, color: snake.color });
@@ -251,7 +259,7 @@
                     }
                 }
 
-                // Self Collision (Only checks if actually moving)
+                // --- SELF COLLISION ---
                 if (snake.speed > 1) {
                     for (let i = 15; i < snake.segments.length; i++) {
                         let seg = snake.segments[i];
@@ -263,7 +271,7 @@
                     }
                 }
 
-                // Orb Mechanics
+                // --- ORB COLLECTION ---
                 let targetOrbCount = 2 + Math.floor(score / 5);
                 while (orbs.length < targetOrbCount) orbs.push(spawnOrb());
 
@@ -284,7 +292,7 @@
                 }
             }
 
-            // Draw Ripples
+            // --- RENDERING ---
             for (let i = ripples.length - 1; i >= 0; i--) {
                 let r = ripples[i];
                 r.radius += 4;
@@ -302,7 +310,6 @@
                 }
             }
 
-            // Draw Orbs (with pulsing visual effect)
             let time = Date.now() * 0.005;
             for (let orb of orbs) {
                 let pulse = Math.sin(time + orb.offset) * 2;
@@ -315,7 +322,6 @@
             }
             ctx.shadowBlur = 0;
 
-            // Draw Snake Body
             for (let i = snake.segments.length - 1; i >= 0; i--) {
                 let seg = snake.segments[i];
                 let scaleFactor = (1 - (i / snake.segments.length) * 0.5);
@@ -326,13 +332,11 @@
                 ctx.fillStyle = seg.color;
                 ctx.fill();
                 
-                // Add a slight outline for contrast against the pale background
                 ctx.strokeStyle = 'rgba(0,0,0,0.05)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
 
-            // Draw Head
             ctx.beginPath();
             ctx.arc(snake.x, snake.y, snake.radius, 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
@@ -341,12 +345,11 @@
             ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Draw Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.x += p.vx;
                 p.y += p.vy;
-                p.vx *= 0.95; // Add friction
+                p.vx *= 0.95; 
                 p.vy *= 0.95;
                 p.alpha -= p.decay;
 
@@ -365,13 +368,11 @@
 
             ctx.restore();
 
-            // HUD
             ctx.fillStyle = '#334155';
             ctx.textAlign = 'left';
             ctx.font = '20px "Press Start 2P", monospace';
             ctx.fillText(`SCORE: ${score}`, 25, 45);
 
-            // Game Over Screen
             if (gameState === 'gameover') {
                 ctx.fillStyle = 'rgba(244, 246, 248, 0.85)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -392,6 +393,8 @@
 
             requestAnimationFrame(gameLoop);
         }
+
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
