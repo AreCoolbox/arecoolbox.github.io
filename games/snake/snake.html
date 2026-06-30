@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Bouncy Snake - Hyper Edition</title>
+    <title>Bouncy Snake - Pale Edition</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
         body {
             margin: 0;
             padding: 0;
-            background-color: #111;
+            background-color: #f4f6f8; /* Pale background */
             overflow: hidden;
             touch-action: none;
             font-family: 'Press Start 2P', monospace;
+            user-select: none;
+            -webkit-user-select: none;
         }
         canvas {
             display: block;
@@ -37,127 +39,141 @@
         let gameState = 'playing'; 
         let score = 0;
         
-        // World system centered at (0,0)
-        let arena = {
-            width: 500,
-            height: 500
-        };
-
-        let camera = {
-            x: 0,
-            y: 0,
-            ease: 0.1
-        };
+        let arena = { width: 600, height: 600 };
+        let camera = { x: 0, y: 0, ease: 0.1 };
 
         function getPaleColor() {
-            return `hsl(${Math.random() * 360}, 75%, 70%)`;
+            // Bright, pastel colors
+            return `hsl(${Math.random() * 360}, 80%, 65%)`;
         }
 
         let snake = {
             segments: [],
             length: 20,
-            radius: 10,
+            radius: 12,
             x: 0,
             y: 0,
             angle: 0,
-            speed: 5,
-            baseSpeed: 5,
+            speed: 0,      // Current moving speed
+            baseSpeed: 6,  // Target speed when touching
+            boost: 0,      // Temporary speed from bouncing
             color: getPaleColor()
         };
 
         let mouseX = 0;
-        let mouseY = -100;
+        let mouseY = 0;
+        let isTouching = false;
+        
         let orbs = [];
         let particles = [];
+        let ripples = [];
 
         // Input Handling
         function updateTarget(e) {
-            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-            
-            // Keep track of raw screen coordinates
-            mouseX = clientX;
-            mouseY = clientY;
-            
-            if (gameState === 'gameover') resetGame();
+            if (e.type.includes('touch')) {
+                mouseX = e.touches[0].clientX;
+                mouseY = e.touches[0].clientY;
+            } else {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            }
         }
         
-        window.addEventListener('mousemove', updateTarget);
-        window.addEventListener('touchmove', updateTarget);
-        window.addEventListener('touchstart', updateTarget);
-        window.addEventListener('mousedown', () => { if(gameState === 'gameover') resetGame(); });
+        // Touch events
+        window.addEventListener('touchstart', (e) => {
+            if (gameState === 'gameover') { resetGame(); return; }
+            isTouching = true;
+            updateTarget(e);
+        }, {passive: false});
+        window.addEventListener('touchmove', (e) => {
+            if (isTouching) updateTarget(e);
+        }, {passive: false});
+        window.addEventListener('touchend', () => isTouching = false);
+        window.addEventListener('touchcancel', () => isTouching = false);
+
+        // Mouse events
+        window.addEventListener('mousedown', (e) => {
+            if (gameState === 'gameover') { resetGame(); return; }
+            isTouching = true;
+            updateTarget(e);
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (isTouching) updateTarget(e);
+        });
+        window.addEventListener('mouseup', () => isTouching = false);
+        window.addEventListener('mouseleave', () => isTouching = false);
 
         function spawnParticle(x, y, color) {
-            for (let i = 0; i < 12; i++) {
+            for (let i = 0; i < 10; i++) {
                 particles.push({
-                    x: x,
-                    y: y,
-                    vx: (Math.random() - 0.5) * 8,
-                    vy: (Math.random() - 0.5) * 8,
-                    radius: Math.random() * 3 + 2,
+                    x: x, y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    radius: Math.random() * 4 + 2,
                     color: color,
                     alpha: 1,
-                    decay: Math.random() * 0.03 + 0.02
+                    decay: Math.random() * 0.04 + 0.02
                 });
             }
         }
 
+        function spawnRipple(x, y, color) {
+            ripples.push({ x: x, y: y, radius: 5, color: color, alpha: 0.8 });
+        }
+
         function spawnOrb() {
-            const buffer = 30;
+            const buffer = 40;
             return {
                 x: (Math.random() - 0.5) * (arena.width - buffer * 2),
                 y: (Math.random() - 0.5) * (arena.height - buffer * 2),
-                radius: 7,
-                color: getPaleColor()
+                radius: 8,
+                color: getPaleColor(),
+                offset: Math.random() * 100 // For unique pulsing timing
             };
         }
 
         function resetGame() {
             score = 0;
-            arena.width = 550;
-            arena.height = 550;
+            arena.width = 600;
+            arena.height = 600;
             snake.x = 0;
             snake.y = 0;
-            snake.speed = snake.baseSpeed;
+            snake.speed = 0;
+            snake.boost = 0;
             snake.length = 20;
-            snake.segments = [];
-            for (let i = 0; i < snake.length; i++) {
-                snake.segments.push({ x: 0, y: 0, color: getPaleColor() });
-            }
+            snake.segments = [{ x: 0, y: 0, color: getPaleColor() }];
+            
             orbs = [spawnOrb(), spawnOrb(), spawnOrb()];
             particles = [];
+            ripples = [];
+            isTouching = false;
             gameState = 'playing';
         }
 
-        // Init
         resetGame();
 
         function gameLoop() {
-            // Smooth background clearing
-            ctx.fillStyle = '#141414';
+            // Pale Background
+            ctx.fillStyle = '#f4f6f8';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // --- CAMERA CALCULATIONS ---
-            // Center map on screen if it fits; otherwise track snake head smoothly
+            // Camera Tracking
             let targetCamX = (arena.width > canvas.width) ? snake.x : 0;
             let targetCamY = (arena.height > canvas.height) ? snake.y : 0;
-            
             camera.x += (targetCamX - camera.x) * camera.ease;
             camera.y += (targetCamY - camera.y) * camera.ease;
 
-            // Translate mouse screen coordinates to modern world positions
             let worldMouseX = mouseX - canvas.width / 2 + camera.x;
             let worldMouseY = mouseY - canvas.height / 2 + camera.y;
 
-            // --- START WORLD RENDERING (CAMERA SPACE) ---
             ctx.save();
             ctx.translate(canvas.width / 2 - camera.x, canvas.height / 2 - camera.y);
 
             let halfW = arena.width / 2;
             let halfH = arena.height / 2;
 
-            // Draw Arena Grid System
-            ctx.strokeStyle = '#222';
+            // Draw Classic Grid
+            ctx.strokeStyle = '#e2e8f0'; // Light grey-blue grid lines
             ctx.lineWidth = 1;
             for (let x = -halfW; x <= halfW; x += 40) {
                 ctx.beginPath(); ctx.moveTo(x, -halfH); ctx.lineTo(x, halfH); ctx.stroke();
@@ -166,39 +182,39 @@
                 ctx.beginPath(); ctx.moveTo(-halfW, y); ctx.lineTo(halfW, y); ctx.stroke();
             }
 
-            // Draw Neon Arena Boundaries
-            ctx.strokeStyle = '#ff3b30';
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = '#ff3b30';
-            ctx.lineWidth = 4;
+            // Draw Arena Boundaries
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 6;
             ctx.strokeRect(-halfW, -halfH, arena.width, arena.height);
-            ctx.shadowBlur = 0; // Reset glow immediately for performance
 
             if (gameState === 'playing') {
-                // Physics Steering Setup
-                let dx = worldMouseX - snake.x;
-                let dy = worldMouseY - snake.y;
-                let distToTarget = Math.hypot(dx, dy);
+                // Smooth turning only when touching
+                if (isTouching) {
+                    let dx = worldMouseX - snake.x;
+                    let dy = worldMouseY - snake.y;
+                    let distToTarget = Math.hypot(dx, dy);
 
-                if (distToTarget > 10) {
-                    let targetAngle = Math.atan2(dy, dx);
-                    let angleDiff = targetAngle - snake.angle;
-                    
-                    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-                    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                    if (distToTarget > 10) {
+                        let targetAngle = Math.atan2(dy, dx);
+                        let angleDiff = targetAngle - snake.angle;
+                        
+                        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
 
-                    snake.angle += angleDiff * 0.18;
-
-                    // Uncapped structural speed accumulation
-                    let straightLineBonus = (Math.abs(angleDiff) < 0.15) ? 0.05 : 0;
-                    snake.speed += straightLineBonus;
+                        snake.angle += angleDiff * 0.15; // Smooth turn
+                    }
                 }
 
-                // Move Snake Head
+                // Dynamic Speed & Deceleration
+                let targetSpeed = isTouching ? (snake.baseSpeed + snake.boost) : 0;
+                snake.speed += (targetSpeed - snake.speed) * 0.1; // Smoothly speed up or slow down
+                snake.boost *= 0.92; // Bounce boost decays rapidly
+
+                // Move Head
                 snake.x += Math.cos(snake.angle) * snake.speed;
                 snake.y += Math.sin(snake.angle) * snake.speed;
 
-                // Infinite Uncapped Elastic Bouncing Core
+                // Bouncing Mechanics
                 let bounced = false;
                 if (snake.x - snake.radius < -halfW) {
                     snake.x = -halfW + snake.radius;
@@ -221,92 +237,117 @@
                 }
 
                 if (bounced) {
-                    // Elastic velocity jump logic (Bounciness scales directly with velocity)
-                    snake.speed = Math.max(snake.speed, snake.baseSpeed) * 1.2;
-                    spawnParticle(snake.x, snake.y, '#ffffff');
+                    snake.boost = 8; // Cap the maximum bounce boost
+                    spawnParticle(snake.x, snake.y, snake.color);
+                    spawnRipple(snake.x, snake.y, snake.color);
                 }
 
-                // Update Tail Position Tracking Matrices
-                snake.segments.unshift({ x: snake.x, y: snake.y, color: snake.color });
-                while (snake.segments.length > snake.length) {
-                    snake.segments.pop();
-                }
-
-                // Self Collision Mechanics (Lenient start threshold based on body mass scale)
-                for (let i = 35; i < snake.segments.length; i++) {
-                    let seg = snake.segments[i];
-                    let dist = Math.hypot(snake.x - seg.x, snake.y - seg.y);
-                    if (dist < snake.radius * 0.8) {
-                        gameState = 'gameover';
-                        spawnParticle(snake.x, snake.y, '#ff3b30');
+                // Distance-Based Segment Tracking (Fixes the stop-and-die bug)
+                let lastSeg = snake.segments[0];
+                if (!lastSeg || Math.hypot(snake.x - lastSeg.x, snake.y - lastSeg.y) >= 4) {
+                    snake.segments.unshift({ x: snake.x, y: snake.y, color: snake.color });
+                    if (snake.segments.length > snake.length) {
+                        snake.segments.pop();
                     }
                 }
 
-                // Dynamic Balance Orb Generation Mechanics
-                let targetOrbCount = 2 + Math.floor(score / 4);
-                while (orbs.length < targetOrbCount) {
-                    orbs.push(spawnOrb());
+                // Self Collision (Only checks if actually moving)
+                if (snake.speed > 1) {
+                    for (let i = 15; i < snake.segments.length; i++) {
+                        let seg = snake.segments[i];
+                        if (Math.hypot(snake.x - seg.x, snake.y - seg.y) < snake.radius * 0.7) {
+                            gameState = 'gameover';
+                            spawnParticle(snake.x, snake.y, '#ff3b30');
+                            spawnRipple(snake.x, snake.y, '#ff3b30');
+                        }
+                    }
                 }
 
-                // Orb Intersection Calculations
+                // Orb Mechanics
+                let targetOrbCount = 2 + Math.floor(score / 5);
+                while (orbs.length < targetOrbCount) orbs.push(spawnOrb());
+
                 for (let i = orbs.length - 1; i >= 0; i--) {
                     let orb = orbs[i];
-                    let distToOrb = Math.hypot(snake.x - orb.x, snake.y - orb.y);
-                    
-                    if (distToOrb < snake.radius + orb.radius) {
+                    if (Math.hypot(snake.x - orb.x, snake.y - orb.y) < snake.radius + orb.radius) {
                         score += 1;
-                        snake.length += 4;
+                        snake.length += 5;
                         snake.color = orb.color;
                         
                         spawnParticle(orb.x, orb.y, orb.color);
+                        spawnRipple(orb.x, orb.y, orb.color);
 
-                        // Infinite map growth step parameters
-                        arena.width += 60;
-                        arena.height += 60;
-                        
+                        arena.width += 50;
+                        arena.height += 50;
                         orbs.splice(i, 1);
                     }
                 }
             }
 
-            // Draw Processing Units - Orbs
+            // Draw Ripples
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                let r = ripples[i];
+                r.radius += 4;
+                r.alpha -= 0.04;
+                if (r.alpha <= 0) {
+                    ripples.splice(i, 1);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = r.color;
+                    ctx.globalAlpha = r.alpha;
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // Draw Orbs (with pulsing visual effect)
+            let time = Date.now() * 0.005;
             for (let orb of orbs) {
+                let pulse = Math.sin(time + orb.offset) * 2;
                 ctx.beginPath();
-                ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2);
+                ctx.arc(orb.x, orb.y, orb.radius + pulse, 0, Math.PI * 2);
                 ctx.fillStyle = orb.color;
-                ctx.shadowBlur = 10;
+                ctx.shadowBlur = 15;
                 ctx.shadowColor = orb.color;
                 ctx.fill();
             }
             ctx.shadowBlur = 0;
 
-            // Draw Processing Units - Tapered Segmented Body
+            // Draw Snake Body
             for (let i = snake.segments.length - 1; i >= 0; i--) {
                 let seg = snake.segments[i];
-                // Smooth geometric trailing width distribution formula
-                let scaleFactor = (1 - (i / snake.segments.length) * 0.6);
+                let scaleFactor = (1 - (i / snake.segments.length) * 0.5);
                 let currentRadius = snake.radius * scaleFactor;
 
                 ctx.beginPath();
                 ctx.arc(seg.x, seg.y, currentRadius, 0, Math.PI * 2);
                 ctx.fillStyle = seg.color;
                 ctx.fill();
+                
+                // Add a slight outline for contrast against the pale background
+                ctx.strokeStyle = 'rgba(0,0,0,0.05)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
             }
 
-            // Draw Processing Units - White Gloss Snake Head
+            // Draw Head
             ctx.beginPath();
             ctx.arc(snake.x, snake.y, snake.radius, 0, Math.PI * 2);
             ctx.fillStyle = '#ffffff';
-            ctx.shadowBlur = 8;
-            ctx.shadowColor = '#ffffff';
             ctx.fill();
-            ctx.shadowBlur = 0;
+            ctx.strokeStyle = snake.color;
+            ctx.lineWidth = 3;
+            ctx.stroke();
 
-            // Draw Visual FX Particles
+            // Draw Particles
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.x += p.vx;
                 p.y += p.vy;
+                p.vx *= 0.95; // Add friction
+                p.vy *= 0.95;
                 p.alpha -= p.decay;
 
                 if (p.alpha <= 0) {
@@ -314,29 +355,25 @@
                     continue;
                 }
 
-                ctx.save();
                 ctx.globalAlpha = p.alpha;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
                 ctx.fillStyle = p.color;
                 ctx.fill();
-                ctx.restore();
+                ctx.globalAlpha = 1;
             }
 
             ctx.restore();
-            // --- END WORLD RENDERING (SCREEN SPACE ONWARDS) ---
 
-            // Draw HUD - Dynamic Scoreboard Tracker
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            // HUD
+            ctx.fillStyle = '#334155';
             ctx.textAlign = 'left';
             ctx.font = '20px "Press Start 2P", monospace';
             ctx.fillText(`SCORE: ${score}`, 25, 45);
-            ctx.font = '12px "Press Start 2P", monospace';
-            ctx.fillText(`SPEED: ${Math.round(snake.speed * 10)}`, 25, 75);
 
-            // Draw Post-Processing State - Game Over Interface
+            // Game Over Screen
             if (gameState === 'gameover') {
-                ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
+                ctx.fillStyle = 'rgba(244, 246, 248, 0.85)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
                 ctx.fillStyle = '#ff3b30';
@@ -344,19 +381,17 @@
                 ctx.font = '32px "Press Start 2P", monospace';
                 ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 30);
                 
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = '#334155';
                 ctx.font = '18px "Press Start 2P", monospace';
                 ctx.fillText(`FINAL SCORE: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
 
-                ctx.fillStyle = '#888';
+                ctx.fillStyle = '#94a3b8';
                 ctx.font = '12px "Press Start 2P", monospace';
                 ctx.fillText("TAP OR CLICK TO RESTART", canvas.width / 2, canvas.height / 2 + 70);
             }
 
             requestAnimationFrame(gameLoop);
         }
-
-        gameLoop();
     </script>
 </body>
 </html>
