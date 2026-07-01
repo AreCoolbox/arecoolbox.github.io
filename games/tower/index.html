@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tower</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #e2e8f0; /* Трохи темніший фон для контрасту скла */
+            overflow: hidden;
+            touch-action: none; /* Забороняє браузеру скролити сторінку пальцем */
+            font-family: 'Press Start 2P', monospace;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #334155;
+            font-size: 20px;
+            pointer-events: none;
+            z-index: 10;
+            text-shadow: 2px 2px 0px rgba(255, 255, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div id="ui">SCORE: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const Engine = Matter.Engine,
+              Runner = Matter.Runner,
+              Bodies = Matter.Bodies,
+              Body = Matter.Body,
+              Composite = Matter.Composite,
+              Events = Matter.Events;
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+
+        let engine, runner, ground;
+        let blocks = [];
+        let activeBlock = null;
+        let particles = [];
+        
+        let gameState = 'playing';
+        let score = 0;
+        let cameraY = 0;
+        let pointerX = window.innerWidth / 2;
+        let spinSpeed = 0;
+        let highestPoint = window.innerHeight;
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (ground) {
+                Body.setPosition(ground, { x: canvas.width / 2, y: canvas.height - 100 });
+            }
+        }
+        window.addEventListener('resize', resize);
+
+        // Генерація "скляних" кольорів
+        function getGlassColor() {
+            const hue = Math.floor(Math.random() * 360);
+            return {
+                fill: `hsla(${hue}, 80%, 65%, 0.4)`, 
+                glow: `hsla(${hue}, 80%, 65%, 0.8)`, 
+                border: `hsla(${hue}, 100%, 85%, 0.9)`
+            };
+        }
+
+        function spawnImpactParticles(x, y, colorData) {
+            for (let i = 0; i < 6; i++) {
+                particles.push({
+                    x: x, 
+                    y: y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8 - 2,
+                    radius: Math.random() * 4 + 2,
+                    color: colorData.glow,
+                    alpha: 1,
+                    decay: Math.random() * 0.04 + 0.02
+                });
+            }
+        }
+
+        function spawnShape() {
+            if (gameState !== 'playing') return;
+
+            const u = 28;
+            const startY = highestPoint - 180; 
+            const shapes = [
+                [Bodies.rectangle(pointerX, startY, u * 4, u)],
+                [Bodies.rectangle(pointerX, startY, u * 2, u * 2)],
+                [Bodies.rectangle(pointerX, startY, u * 3, u), Bodies.rectangle(pointerX, startY + u, u, u)],
+                [Bodies.rectangle(pointerX, startY, u, u * 3), Bodies.rectangle(pointerX + u, startY + u, u, u)],
+                [Bodies.rectangle(pointerX, startY, u * 2, u), Bodies.rectangle(pointerX + u, startY + u, u * 2, u)]
+            ];
+
+            const parts = shapes[Math.floor(Math.random() * shapes.length)];
+            
+            activeBlock = Body.create({
+                parts: parts,
+                isSensor: true, 
+                isStatic: true, 
+                friction: 1.0,         
+                frictionStatic: 100.0,
+                restitution: 0.0,      
+                density: 0.2           
+            });
+
+            activeBlock.colorData = getGlassColor();
+            Composite.add(engine.world, activeBlock);
+            blocks.push(activeBlock);
+            spinSpeed = 0; // Початковий спін дорівнює 0!
+        }
+
+        function dropShape() {
+            if (!activeBlock || gameState !== 'playing') return;
+
+            Body.setStatic(activeBlock, false);
+            activeBlock.isSensor = false;
+            Body.setAngularVelocity(activeBlock, spinSpeed);
+            
+            activeBlock = null;
+            score++;
+            scoreEl.innerText = score;
+
+            setTimeout(spawnShape, 600);
+        }
+
+        function initGame() {
+            resize();
+            if (engine) {
+                Runner.stop(runner);
+                Engine.clear(engine);
+            }
+
+            engine = Engine.create();
+            engine.gravity.y = 1.0; // Плавна гравітація
+            
+            runner = Runner.create();
+            
+            blocks = [];
+            particles = [];
+            score = 0;
+            scoreEl.innerText = score;
+            cameraY = 0;
+            highestPoint = canvas.height - 100;
+            gameState = 'playing';
+
+            ground = Bodies.rectangle(canvas.width / 2, canvas.height - 100, 300, 40, { 
+                isStatic: true,
+                friction: 1,
+                frictionStatic: 100,
+                restitution: 0 
+            });
+            ground.colorData = {
+                fill: 'rgba(148, 163, 184, 0.4)',
+                glow: 'rgba(148, 163, 184, 0.8)',
+                border: 'rgba(255, 255, 255, 0.8)'
+            };
+            Composite.add(engine.world, ground);
+
+            Events.on(engine, 'collisionStart', function(event) {
+                let pairs = event.pairs;
+                for (let i = 0; i < pairs.length; i++) {
+                    if (pairs[i].activeContacts && pairs[i].activeContacts.length > 0) {
+                        let contact = pairs[i].activeContacts[0].vertex;
+                        // Частинки беруть колір тіла, що впало
+                        let colorInfo = pairs[i].bodyA.colorData || ground.colorData;
+                        spawnImpactParticles(contact.x, contact.y, colorInfo);
+                    }
+                }
+            });
+
+            Runner.run(runner, engine);
+            spawnShape();
+            requestAnimationFrame(renderLoop);
+        }
+
+        function updatePointer(e) {
+            e.preventDefault(); // Запобігає зуму та скролу на мобільних
+            if (e.touches && e.touches.length > 0) {
+                pointerX = e.touches[0].clientX;
+            } else if (e.clientX) {
+                pointerX = e.clientX;
+            }
+        }
+
+        // Обробка торкань
+        window.addEventListener('touchstart', (e) => {
+            if (gameState === 'gameover') { initGame(); return; }
+            updatePointer(e);
+        }, {passive: false});
+        
+        window.addEventListener('touchmove', (e) => {
+            if (gameState === 'playing') updatePointer(e);
+        }, {passive: false});
+
+        window.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (gameState === 'playing') dropShape();
+        }, {passive: false});
+
+        window.addEventListener('mousedown', (e) => {
+            if (gameState === 'gameover') { initGame(); return; }
+            updatePointer(e);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (gameState === 'playing') updatePointer(e);
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (gameState === 'playing') dropShape();
+        });
+
+        function renderLoop() {
+            if (gameState === 'gameover') return;
+
+            ctx.fillStyle = '#e2e8f0';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+
+            let currentHighest = ground.position.y;
+            let didFail = false;
+
+            for (let i = 0; i < blocks.length; i++) {
+                let body = blocks[i];
+                if (!body.isStatic && body.position.y < currentHighest) {
+                    currentHighest = body.position.y;
+                }
+                if (body.position.y > ground.position.y + 200) {
+                    didFail = true;
+                }
+            }
+
+            highestPoint = currentHighest;
+
+            let targetCameraY = (canvas.height * 0.75) - highestPoint;
+            if (targetCameraY < 0) targetCameraY = 0; 
+            cameraY += (targetCameraY - cameraY) * 0.1; 
+
+            ctx.translate(0, cameraY);
+
+
+            let timeOffset = Date.now() * 0.02; 
+            let gridSize = 50;
+            
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)'; 
+            ctx.lineWidth = 1;
+            
+            let startYGrid = -cameraY - gridSize;
+            let endYGrid = canvas.height - cameraY + gridSize;
+            
+            let offsetX = timeOffset % gridSize;
+            let offsetY = (cameraY - timeOffset) % gridSize; 
+            
+            ctx.beginPath();
+            for(let x = -gridSize + offsetX; x < canvas.width + gridSize; x += gridSize) {
+                ctx.moveTo(x, startYGrid);
+                ctx.lineTo(x, endYGrid);
+            }
+            for(let y = startYGrid - offsetY; y < endYGrid; y += gridSize) {
+                ctx.moveTo(-gridSize, y);
+                ctx.lineTo(canvas.width + gridSize, y);
+            }
+            ctx.stroke();
+
+
+            if (activeBlock) {
+                Body.setPosition(activeBlock, { x: pointerX, y: highestPoint - 180 });
+                Body.setAngle(activeBlock, activeBlock.angle + spinSpeed);
+                
+
+                let spinPenalty = 0.0001 + (score * 0.00003); 
+                spinSpeed += spinPenalty;
+
+                ctx.beginPath();
+                ctx.setLineDash([5, 5]);
+                ctx.moveTo(pointerX, highestPoint - 180);
+                ctx.lineTo(pointerX, ground.position.y);
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.setLineDash([]); 
+            }
+
+
+            drawBody(ground);
+            for (let body of blocks) {
+                drawBody(body);
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                let p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.alpha -= p.decay;
+                
+                if (p.alpha <= 0) {
+                    particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.globalAlpha = p.alpha;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                
+                // Світіння для іскор
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = p.color;
+                
+                ctx.fill();
+                ctx.shadowBlur = 0; // Скидаємо
+                ctx.globalAlpha = 1;
+            }
+
+            ctx.restore();
+
+            if (didFail) {
+                gameState = 'gameover';
+                showGameOver();
+            } else {
+                requestAnimationFrame(renderLoop);
+            }
+        }
+
+        // Функція малювання скляних блоків
+        function drawBody(body) {
+            const parts = body.parts.length > 1 ? body.parts.slice(1) : body.parts;
+            
+            // Налаштування світіння (Імітація блюру по краях)
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = body.colorData.glow;
+
+            ctx.fillStyle = body.colorData.fill;
+            ctx.strokeStyle = body.colorData.border;
+            ctx.lineWidth = 2;
+
+            for (let part of parts) {
+                ctx.beginPath();
+                let vertices = part.vertices;
+                ctx.moveTo(vertices[0].x, vertices[0].y);
+                for (let j = 1; j < vertices.length; j++) {
+                    ctx.lineTo(vertices[j].x, vertices[j].y);
+                }
+                ctx.lineTo(vertices[0].x, vertices[0].y);
+                
+                ctx.fill();
+                
+
+                ctx.shadowBlur = 0;
+                ctx.stroke();
+                
+
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+а
+                ctx.shadowBlur = 15;
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function showGameOver() {
+            ctx.fillStyle = 'rgba(226, 232, 240, 0.85)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#ff3b30';
+            ctx.textAlign = 'center';
+            ctx.font = '32px "Press Start 2P", monospace';
+            ctx.fillText("TOWER FELL", canvas.width / 2, canvas.height / 2 - 30);
+            
+            ctx.fillStyle = '#334155';
+            ctx.font = '18px "Press Start 2P", monospace';
+            ctx.fillText(`SCORE: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '12px "Press Start 2P", monospace';
+            ctx.fillText("TAP TO REBUILD", canvas.width / 2, canvas.height / 2 + 70);
+        }
+
+        initGame();
+
+    </script>
+</body>
+</html>
