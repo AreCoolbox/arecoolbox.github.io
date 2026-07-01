@@ -73,9 +73,9 @@
         function getGlassColor() {
             const hue = Math.floor(Math.random() * 360);
             return {
-                fill: `hsla(${hue}, 80%, 65%, 0.4)`, 
-                glow: `hsla(${hue}, 80%, 65%, 0.8)`, 
-                border: `hsla(${hue}, 100%, 85%, 0.9)`
+                fill: `hsla(${hue}, 80%, 65%, 0.4)`, // Напівпрозорий для ефекту скла
+                glow: `hsla(${hue}, 80%, 65%, 0.8)`, // Яскравіший для блюру
+                border: `hsla(${hue}, 100%, 85%, 0.9)` // Майже білий контур
             };
         }
 
@@ -97,7 +97,7 @@
         function spawnShape() {
             if (gameState !== 'playing') return;
 
-            const u = 28;
+            const u = 28; // Трохи більші блоки для мобільних
             const startY = highestPoint - 180; 
             const shapes = [
                 [Bodies.rectangle(pointerX, startY, u * 4, u)],
@@ -114,9 +114,9 @@
                 isSensor: true, 
                 isStatic: true, 
                 friction: 1.0,         
-                frictionStatic: 100.0,
+                frictionStatic: 100.0, // МАКСИМАЛЬНА "липкість"
                 restitution: 0.0,      
-                density: 0.2           
+                density: 0.2           // Блоки важчі, щоб їх важко було збити
             });
 
             activeBlock.colorData = getGlassColor();
@@ -229,6 +229,7 @@
         function renderLoop() {
             if (gameState === 'gameover') return;
 
+            // Очищення екрану (м'який фон)
             ctx.fillStyle = '#e2e8f0';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -255,18 +256,18 @@
 
             ctx.translate(0, cameraY);
 
-
-            let timeOffset = Date.now() * 0.02; 
+            // РУХОМА СІТКА (Анімована)
+            let timeOffset = Date.now() * 0.02; // Швидкість руху сітки
             let gridSize = 50;
             
-            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)'; 
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)'; // Напівпрозора сітка
             ctx.lineWidth = 1;
             
             let startYGrid = -cameraY - gridSize;
             let endYGrid = canvas.height - cameraY + gridSize;
             
             let offsetX = timeOffset % gridSize;
-            let offsetY = (cameraY - timeOffset) % gridSize; 
+            let offsetY = (cameraY - timeOffset) % gridSize; // Рухається по діагоналі вниз
             
             ctx.beginPath();
             for(let x = -gridSize + offsetX; x < canvas.width + gridSize; x += gridSize) {
@@ -279,15 +280,16 @@
             }
             ctx.stroke();
 
-
+            // Логіка Активного Блоку (Динамічна складність)
             if (activeBlock) {
                 Body.setPosition(activeBlock, { x: pointerX, y: highestPoint - 180 });
                 Body.setAngle(activeBlock, activeBlock.angle + spinSpeed);
                 
-
+                // ЛЕГКИЙ СТАРТ: Чим більший рахунок, тим швидше набирається швидкість обертання
                 let spinPenalty = 0.0001 + (score * 0.00003); 
                 spinSpeed += spinPenalty;
 
+                // Лінія прицілювання
                 ctx.beginPath();
                 ctx.setLineDash([5, 5]);
                 ctx.moveTo(pointerX, highestPoint - 180);
@@ -298,12 +300,13 @@
                 ctx.setLineDash([]); 
             }
 
-
+            // Малюємо всі тіла
             drawBody(ground);
             for (let body of blocks) {
                 drawBody(body);
             }
 
+            // Малюємо іскри
             for (let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i];
                 p.x += p.vx;
@@ -360,20 +363,21 @@
                 }
                 ctx.lineTo(vertices[0].x, vertices[0].y);
                 
-                ctx.fill();
+                ctx.fill(); // Заливка прозорим кольором (сітку видно крізь неї)
                 
-
+                // Вимикаємо тінь для чіткого скляного контуру
                 ctx.shadowBlur = 0;
                 ctx.stroke();
                 
-
+                // Додаємо ефект відблиску скла (внутрішня лінія)
                 ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
                 ctx.lineWidth = 4;
                 ctx.stroke();
-а
+                
+                // Повертаємо тінь для наступного фрагмента
                 ctx.shadowBlur = 15;
             }
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 0; // Скидаємо тінь в кінці
         }
 
         function showGameOver() {
