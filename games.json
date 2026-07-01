@@ -1,4 +1,4 @@
 [
-  { "title": "Snake", "url": "games/snake/snake.html" }
+  { "title": "Snake", "url": "games/snake/snake.html" },
   { "title": "Tower", "url": "games/tower/index.html" }
 ]
